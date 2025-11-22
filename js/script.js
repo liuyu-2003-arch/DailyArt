@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const VERSION = 'v1.6-vercel';
+    const VERSION = 'v1.7-env-fix';
     document.getElementById('version-display').textContent = VERSION;
 
     const swiper = document.querySelector('.swiper-container');
@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const randomButton = document.getElementById('random-button');
     const artContainer = document.querySelector('.art-container');
 
-    const apiUrl = '/api/pexels'; // Use our own serverless function
+    const apiUrl = '/api/pexels';
     
     let artworks = [];
     let currentIndex = -1;
@@ -27,7 +27,10 @@ document.addEventListener('DOMContentLoaded', () => {
             await waitForImageLoad(artworks[0]);
             setupInitialCards();
         } else {
-            setErrorState("Could not load any photos.");
+            // This part will now be handled by the error message from the API call
+            if (!document.body.classList.contains('error-state')) {
+                setErrorState("Could not load any photos.");
+            }
         }
     }
 
@@ -118,14 +121,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 await new Promise(resolve => setTimeout(resolve, 400));
                 
-                // THE CORE FIX: Update state, then instantly reset position and redraw all cards.
                 currentIndex = targetIndex;
-                swiper.style.transition = ''; // No transition for the reset
-                swiper.style.transform = `translateY(-${screenHeight}px)`; // Snap back
-                updateAllCards(); // Redraw everything based on the new currentIndex
+                swiper.style.transition = '';
+                swiper.style.transform = `translateY(-${screenHeight}px)`;
+                updateAllCards();
 
             } catch {
-                updateCard(cards.current, artworks[currentIndex]); // Restore on failure
+                updateCard(cards.current, artworks[currentIndex]);
                 swiper.style.transition = 'transform 0.4s ease-out';
                 swiper.style.transform = `translateY(-${screenHeight}px)`;
             } finally {
@@ -171,8 +173,13 @@ document.addEventListener('DOMContentLoaded', () => {
         while (artworks.length < targetCount && hasMorePhotos) {
             try {
                 const response = await fetch(`${apiUrl}?page=${currentPage}`);
-                if (!response.ok) throw new Error(`API Error: ${response.status}`);
                 const data = await response.json();
+
+                if (!response.ok) {
+                    // Display specific error from the serverless function
+                    throw new Error(data.error || `API responded with ${response.status}`);
+                }
+
                 if (data.photos.length === 0) { hasMorePhotos = false; break; }
                 for (const photo of data.photos) {
                     if (photo.src && photo.src.large) {
@@ -184,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 currentPage++;
             } catch (error) {
-                setErrorState('Could not connect to the API.');
+                setErrorState(error.message);
                 break;
             }
         }
