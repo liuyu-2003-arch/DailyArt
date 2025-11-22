@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const VERSION = 'v1.0-final-fix';
+    const VERSION = 'v1.1-flicker-fix';
     document.getElementById('version-display').textContent = VERSION;
 
     const swiper = document.querySelector('.swiper-container');
@@ -34,16 +34,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupInitialCards() {
         currentIndex = 0;
         swiper.style.transform = `translateY(-${screenHeight}px)`;
-        updateAllCards();
+        updateCard(cards.current, artworks[0]);
+        updateCard(cards.next, artworks[1]);
+        cards.prev.classList.remove('visible');
     }
 
     // --- Core Data & UI Update Logic ---
-    function updateAllCards() {
-        updateCard(cards.current, artworks[currentIndex]);
-        updateCard(cards.prev, artworks[currentIndex - 1]);
-        updateCard(cards.next, artworks[currentIndex + 1]);
-    }
-
     function updateCard(cardElement, artworkData, state) {
         if (!cardElement) return;
         if (!artworkData) {
@@ -69,13 +65,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function waitForImageLoad(artwork) {
         if (!artwork) return Promise.reject();
-        
         return new Promise((resolve, reject) => {
             const img = new Image();
             img.src = artwork.image;
             img.onload = resolve;
             img.onerror = reject;
         });
+    }
+
+    // The robust, flicker-free DOM cycling logic
+    function cycleCards(direction) {
+        swiper.style.transition = ''; // Disable transition for the swap
+
+        const temp = cards.prev;
+        if (direction === 'up') {
+            cards.prev = cards.current;
+            cards.current = cards.next;
+            cards.next = temp;
+        } else { // down
+            cards.next = cards.current;
+            cards.current = cards.prev;
+            cards.prev = temp;
+        }
+        
+        cards.prev.id = 'card-prev';
+        cards.current.id = 'card-current';
+        cards.next.id = 'card-next';
+        
+        swiper.style.transform = `translateY(-${screenHeight}px)`;
+
+        // Update the content of the new out-of-view card
+        if (direction === 'up') {
+            updateCard(cards.next, artworks[currentIndex + 1]);
+        } else {
+            updateCard(cards.prev, artworks[currentIndex - 1]);
+        }
+
+        if (artworks.length - currentIndex < 3) {
+            fillArtworkBuffer(artworks.length + 5);
+        }
     }
 
     // --- Touch Events & Animation ---
@@ -112,8 +140,8 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 updateCard(cards.current, null, 'loading');
                 await waitForImageLoad(artworks[targetIndex]);
-
-                // Update state right before animation
+                
+                // Update state before animation
                 currentIndex = targetIndex;
 
                 swiper.style.transition = 'transform 0.4s ease-out';
@@ -122,10 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 await new Promise(resolve => setTimeout(resolve, 400));
                 
-                // The new, simplified "snap back" logic
-                swiper.style.transition = '';
-                swiper.style.transform = `translateY(-${screenHeight}px)`;
-                updateAllCards();
+                cycleCards(direction);
 
             } catch {
                 updateCard(cards.current, artworks[currentIndex]); // Restore caption
@@ -133,9 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 swiper.style.transform = `translateY(-${screenHeight}px)`;
             } finally {
                 isAnimating = false;
-                if (artworks.length - currentIndex < 3) {
-                    fillArtworkBuffer(artworks.length + 5);
-                }
             }
         } else {
             swiper.style.transition = 'transform 0.4s ease-out';
@@ -160,7 +182,10 @@ document.addEventListener('DOMContentLoaded', () => {
             await new Promise(resolve => setTimeout(resolve, 400));
 
             currentIndex = randomIndex;
-            updateAllCards();
+            // When doing a random jump, we have to reset all cards
+            updateCard(cards.current, artworks[currentIndex]);
+            updateCard(cards.prev, artworks[currentIndex - 1]);
+            updateCard(cards.next, artworks[currentIndex + 1]);
         } catch {
             updateCard(cards.current, artworks[currentIndex]);
         } finally {
