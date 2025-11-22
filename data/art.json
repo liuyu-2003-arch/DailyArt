@@ -1,0 +1,10 @@
+[
+    {
+        "image": "images/art1.jpg",
+        "caption": "Artwork 1 - A beautiful piece of art."
+    },
+    {
+        "image": "images/art2.jpg",
+        "caption": "Artwork 2 - Another stunning artwork."
+    }
+]
