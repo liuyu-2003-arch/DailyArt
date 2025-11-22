@@ -1,6 +1,6 @@
 // api/pexels.js
 export default async function handler(request, response) {
-    const apiKey = process.env.PEXELS_API_KEY;
+    const apiKey = bnPRAGRfMivaeevwqKCh42RJ;
 
     // Crucial check: Ensure the API key is configured on Vercel.
     if (!apiKey) {
