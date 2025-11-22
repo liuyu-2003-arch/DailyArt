@@ -1,76 +1,64 @@
 document.addEventListener('DOMContentLoaded', () => {
     const artImage = document.getElementById('art-image');
-    const artCaption = document.getElementById('art-caption');
+    const captionTitle = document.getElementById('caption-title');
+    const captionDetail = document.getElementById('caption-detail');
     const randomButton = document.getElementById('random-button');
+    const artContainer = document.querySelector('.art-container');
 
     // --- Pexels API Configuration ---
     const apiKey = 'dcvXtf9LJtUm2KIhnEdMpomMlx4NLhAvzdPArmKTHTq3ISqJpWj2tNUX';
     const apiUrl = 'https://api.pexels.com/v1/curated';
 
-    let artworks = []; // The buffer of loaded, valid artwork objects
-    let currentIndex = -1; // Current index in the 'artworks' buffer
-    let currentPage = 1; // For API pagination
+    let artworks = [], currentIndex = -1, currentPage = 1, isFetching = false, hasMorePhotos = true;
     const photosPerPage = 15;
-    let isFetching = false;
-    let hasMorePhotos = true; // Assume there are more photos initially
 
     // --- UI & State Management ---
-    function updateCaption(text) { artCaption.textContent = text; }
+    function updateCaption(title, detailText, detailUrl) {
+        captionTitle.textContent = title;
+        if (detailText && detailUrl) {
+            captionDetail.textContent = detailText;
+            captionDetail.href = detailUrl;
+            captionDetail.style.display = 'inline-block';
+        } else {
+            captionDetail.style.display = 'none';
+        }
+    }
 
     function setErrorState(message) {
         document.body.classList.add('error-state');
         artImage.style.display = 'none';
         randomButton.style.display = 'none';
-        updateCaption(message);
+        updateCaption(message, null, null);
     }
 
     // --- Core Data Fetching Logic ---
     async function initialize() {
-        updateCaption('Connecting to Pexels...');
-        document.body.classList.remove('error-state');
-        artImage.style.display = '';
-        randomButton.style.display = '';
-
-        await fillArtworkBuffer(5); // Pre-fill the buffer with 5 items
-
-        if (artworks.length > 0) {
-            loadArtwork(0);
-        } else {
-            setErrorState("Could not load any photos from Pexels.");
-        }
+        updateCaption('Connecting to Pexels...', null, null);
+        await fillArtworkBuffer(5);
+        if (artworks.length > 0) loadArtwork(0);
+        else setErrorState("Could not load any photos from Pexels.");
     }
 
     async function fillArtworkBuffer(targetCount) {
         if (isFetching || !hasMorePhotos) return;
         isFetching = true;
-
         let foundCount = artworks.filter(a => a.valid).length;
 
         while (foundCount < targetCount && hasMorePhotos) {
-            updateCaption(`Searching for photos... (${foundCount}/${targetCount})`);
+            updateCaption(`Searching for photos... (${foundCount}/${targetCount})`, null, null);
             try {
-                const response = await fetch(`${apiUrl}?page=${currentPage}&per_page=${photosPerPage}`, {
-                    headers: {
-                        Authorization: apiKey
-                    }
-                });
-
-                if (!response.ok) {
-                    throw new Error(`API Error: ${response.status} - ${response.statusText}`);
-                }
-                
+                const response = await fetch(`${apiUrl}?page=${currentPage}&per_page=${photosPerPage}`, { headers: { Authorization: apiKey } });
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
                 const data = await response.json();
-                
-                if (data.photos.length === 0) {
-                    hasMorePhotos = false;
-                    break;
-                }
+                if (data.photos.length === 0) { hasMorePhotos = false; break; }
 
                 for (const photo of data.photos) {
                     if (photo.src && photo.src.large && photo.alt) {
                         artworks.push({
                             image: photo.src.large,
-                            caption: photo.alt || `Photo by ${photo.photographer}`,
+                            title: photo.alt,
+                            photographer: `Photo by ${photo.photographer}`,
+                            photographerUrl: photo.photographer_url,
                             valid: true,
                         });
                         foundCount++;
@@ -79,30 +67,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentPage++;
             } catch (error) {
                 console.error('Failed to fetch photos:', error);
-                setErrorState('Could not connect to the Pexels API. Please check your network or API key.');
+                setErrorState('Could not connect to the Pexels API.');
                 break;
             }
         }
-        
-        console.log(`Buffer fill complete. Total artworks in buffer: ${artworks.length}`);
         isFetching = false;
     }
 
     // --- Artwork Navigation ---
     function loadArtwork(index) {
         if (index < 0 || index >= artworks.length) return;
-        
         const artwork = artworks[index];
-        if (!artwork.valid) {
-            loadNextArtwork(); return;
-        }
+        if (!artwork.valid) { loadNextArtwork(); return; }
 
         currentIndex = index;
-        updateCaption('Loading...');
+        updateCaption('Loading...', null, null);
         artImage.src = artwork.image;
 
-        const validItemsAhead = artworks.slice(index).filter(a => a.valid).length;
-        if (validItemsAhead < 3 && hasMorePhotos) {
+        if (artworks.slice(index).filter(a => a.valid).length < 3 && hasMorePhotos) {
             fillArtworkBuffer(artworks.length + 5);
         }
     }
@@ -112,16 +94,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (nextIndex !== -1) {
             loadArtwork(nextIndex);
         } else if (hasMorePhotos) {
-            updateCaption('Searching for more photos...');
+            updateCaption('Searching for more photos...', null, null);
             await fillArtworkBuffer(artworks.length + 1);
             const newNextIndex = findValidIndex(currentIndex + 1, 'forward');
-            if (newNextIndex !== -1) {
-                loadArtwork(newNextIndex);
-            } else {
-                updateCaption("You've seen all available photos!");
-            }
+            if (newNextIndex !== -1) loadArtwork(newNextIndex);
+            else updateCaption("You've seen all available photos!", null, null);
         } else {
-            updateCaption("You've seen all available photos!");
+            updateCaption("You've seen all available photos!", null, null);
         }
     }
     
@@ -139,8 +118,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Event Listeners ---
     artImage.onerror = () => { if(artworks[currentIndex]) artworks[currentIndex].valid = false; loadNextArtwork(); };
-    artImage.onload = () => { if(artworks[currentIndex]) updateCaption(artworks[currentIndex].caption); };
+    artImage.onload = () => { if(artworks[currentIndex]) updateCaption(artworks[currentIndex].title, artworks[currentIndex].photographer, artworks[currentIndex].photographerUrl); };
     
+    // Desktop Scroll
     let lastScroll = 0;
     window.addEventListener('wheel', (event) => {
         const now = new Date().getTime();
@@ -149,6 +129,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.deltaY > 0) loadNextArtwork();
         else loadPreviousArtwork();
     });
+
+    // Mobile Touch Swipe
+    let touchStartY = 0;
+    let touchEndY = 0;
+    artContainer.addEventListener('touchstart', e => touchStartY = e.changedTouches[0].screenY, { passive: true });
+    artContainer.addEventListener('touchend', e => {
+        touchEndY = e.changedTouches[0].screenY;
+        handleSwipe();
+    }, { passive: true });
+
+    function handleSwipe() {
+        const swipeDistance = touchEndY - touchStartY;
+        if (Math.abs(swipeDistance) > 50) { // Minimum swipe distance
+            if (swipeDistance < 0) loadNextArtwork(); // Swipe Up
+            else loadPreviousArtwork(); // Swipe Down
+        }
+    }
 
     randomButton.addEventListener('click', () => {
         if (artworks.length > 0) {

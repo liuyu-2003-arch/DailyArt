@@ -35,15 +35,30 @@ body, html {
     background-color: #fff;
 }
 
-#art-caption {
-    margin-top: 20px;
-    font-size: 16px;
-    color: #333;
+.caption-container {
+    margin-top: 15px;
     padding: 0 20px;
-    line-height: 1.5;
     max-height: 15%;
     overflow-y: auto;
-    transition: font-size 0.3s ease, color 0.3s ease;
+}
+
+#caption-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #333;
+    margin: 0;
+}
+
+#caption-detail {
+    font-size: 14px;
+    color: #555;
+    text-decoration: none;
+    margin-top: 5px;
+    display: inline-block;
+}
+
+#caption-detail:hover {
+    text-decoration: underline;
 }
 
 #random-button {
@@ -70,20 +85,24 @@ body, html {
 #random-button svg {
     width: 28px;
     height: 28px;
+    stroke: #333;
 }
 
 /* --- Error State --- */
 body.error-state {
-    background-color: #fbeae5; /* A light red background */
+    background-color: #fbeae5;
 }
 
 .error-state .art-card {
     justify-content: center;
 }
 
-.error-state #art-caption {
+.error-state .caption-container {
     font-size: 18px;
     font-weight: bold;
     color: #c73410;
     max-height: 80%;
+}
+.error-state #caption-detail {
+    display: none;
 }
