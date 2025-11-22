@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const VERSION = 'v1.8-json-fix';
+    const VERSION = 'v1.9-final-polish';
     document.getElementById('version-display').textContent = VERSION;
 
     const swiper = document.querySelector('.swiper-container');
@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let artworks = [];
     let currentIndex = -1;
     let isFetchingData = false, hasMorePhotos = true;
-    let currentPage = Math.floor(Math.random() * 100) + 1;
+    let currentPage = Math.floor(Math.random() * 100) + 1; // Start from a random page
     let isAnimating = false;
     const screenHeight = window.innerHeight;
 
@@ -27,25 +27,19 @@ document.addEventListener('DOMContentLoaded', () => {
             await waitForImageLoad(artworks[0]);
             setupInitialCards();
         } else {
-            if (!document.body.classList.contains('error-state')) {
-                setErrorState("Could not load any photos. Please try again later.");
-            }
+            setErrorState("Could not load any photos.");
         }
     }
 
     function setupInitialCards() {
         currentIndex = 0;
         swiper.style.transform = `translateY(-${screenHeight}px)`;
-        updateAllCards();
+        updateCard(cards.current, artworks[0]);
+        updateCard(cards.next, artworks[1]);
+        cards.prev.classList.remove('visible');
     }
 
     // --- Core Data & UI Update Logic ---
-    function updateAllCards() {
-        updateCard(cards.current, artworks[currentIndex]);
-        updateCard(cards.prev, artworks[currentIndex - 1]);
-        updateCard(cards.next, artworks[currentIndex + 1]);
-    }
-
     function updateCard(cardElement, artworkData, state) {
         if (!cardElement) return;
         if (!artworkData) {
@@ -77,6 +71,39 @@ document.addEventListener('DOMContentLoaded', () => {
             img.onload = resolve;
             img.onerror = reject;
         });
+    }
+
+    // The robust, flicker-free DOM cycling logic
+    function cycleCards(direction) {
+        swiper.style.transition = ''; // Disable transition for the swap
+
+        const temp = cards.prev;
+        if (direction === 'up') {
+            cards.prev = cards.current;
+            cards.current = cards.next;
+            cards.next = temp;
+        } else { // down
+            cards.next = cards.current;
+            cards.current = cards.prev;
+            cards.prev = temp;
+        }
+        
+        cards.prev.id = 'card-prev';
+        cards.current.id = 'card-current';
+        cards.next.id = 'card-next';
+        
+        swiper.style.transform = `translateY(-${screenHeight}px)`;
+
+        // Update the content of the new out-of-view card
+        if (direction === 'up') {
+            updateCard(cards.next, artworks[currentIndex + 1]);
+        } else {
+            updateCard(cards.prev, artworks[currentIndex - 1]);
+        }
+
+        if (artworks.length - currentIndex < 3) {
+            fillArtworkBuffer(artworks.length + 5);
+        }
     }
 
     // --- Touch Events & Animation ---
@@ -113,6 +140,10 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 updateCard(cards.current, null, 'loading');
                 await waitForImageLoad(artworks[targetIndex]);
+                
+                updateCard(cards.current, artworks[currentIndex]);
+
+                currentIndex = targetIndex;
 
                 swiper.style.transition = 'transform 0.4s ease-out';
                 const newY = direction === 'up' ? -2 * screenHeight : 0;
@@ -120,10 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 await new Promise(resolve => setTimeout(resolve, 400));
                 
-                currentIndex = targetIndex;
-                swiper.style.transition = '';
-                swiper.style.transform = `translateY(-${screenHeight}px)`;
-                updateAllCards();
+                cycleCards(direction);
 
             } catch {
                 updateCard(cards.current, artworks[currentIndex]);
@@ -131,9 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 swiper.style.transform = `translateY(-${screenHeight}px)`;
             } finally {
                 isAnimating = false;
-                if (artworks.length - currentIndex < 3) {
-                    fillArtworkBuffer(artworks.length + 5);
-                }
             }
         } else {
             swiper.style.transition = 'transform 0.4s ease-out';
@@ -158,7 +183,9 @@ document.addEventListener('DOMContentLoaded', () => {
             await new Promise(resolve => setTimeout(resolve, 400));
 
             currentIndex = randomIndex;
-            updateAllCards();
+            updateCard(cards.current, artworks[currentIndex]);
+            updateCard(cards.prev, artworks[currentIndex - 1]);
+            updateCard(cards.next, artworks[currentIndex + 1]);
         } catch {
             updateCard(cards.current, artworks[currentIndex]);
         } finally {
@@ -172,15 +199,11 @@ document.addEventListener('DOMContentLoaded', () => {
         while (artworks.length < targetCount && hasMorePhotos) {
             try {
                 const response = await fetch(`${apiUrl}?page=${currentPage}`);
-                
-                // THE CORE FIX: Check if the response is OK before trying to parse JSON.
                 if (!response.ok) {
-                    const errorText = await response.text(); // Get the actual error text (which might be HTML)
-                    throw new Error(errorText);
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `API responded with ${response.status}`);
                 }
-
                 const data = await response.json();
-
                 if (data.photos.length === 0) { hasMorePhotos = false; break; }
                 for (const photo of data.photos) {
                     if (photo.src && photo.src.large) {
@@ -192,7 +215,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 currentPage++;
             } catch (error) {
-                // Now this will display a more useful error message
                 setErrorState(error.message);
                 break;
             }
@@ -201,9 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setErrorState(message) {
-        // Sanitize the message to prevent displaying raw HTML
-        const cleanMessage = message.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-        artContainer.setAttribute('data-error-message', cleanMessage);
+        artContainer.setAttribute('data-error-message', message);
         document.body.classList.add('error-state');
         randomButton.style.display = 'none';
     }
