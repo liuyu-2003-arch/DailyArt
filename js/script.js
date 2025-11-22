@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const VERSION = 'v1.2-final-swipe-fix';
+    const VERSION = 'v1.3-final-polish';
     document.getElementById('version-display').textContent = VERSION;
 
     const swiper = document.querySelector('.swiper-container');
@@ -16,7 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     let artworks = [];
     let currentIndex = -1;
-    let isFetchingData = false, hasMorePhotos = true, currentPage = 1;
+    let isFetchingData = false, hasMorePhotos = true;
+    let currentPage = Math.floor(Math.random() * 100) + 1; // Start from a random page
     let isAnimating = false;
     const screenHeight = window.innerHeight;
 
@@ -34,16 +35,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupInitialCards() {
         currentIndex = 0;
         swiper.style.transform = `translateY(-${screenHeight}px)`;
-        updateAllCards();
+        updateCard(cards.current, artworks[0]);
+        updateCard(cards.next, artworks[1]);
+        cards.prev.classList.remove('visible');
     }
 
     // --- Core Data & UI Update Logic ---
-    function updateAllCards() {
-        updateCard(cards.current, artworks[currentIndex]);
-        updateCard(cards.prev, artworks[currentIndex - 1]);
-        updateCard(cards.next, artworks[currentIndex + 1]);
-    }
-
     function updateCard(cardElement, artworkData, state) {
         if (!cardElement) return;
         if (!artworkData) {
@@ -75,6 +72,39 @@ document.addEventListener('DOMContentLoaded', () => {
             img.onload = resolve;
             img.onerror = reject;
         });
+    }
+
+    // The robust, flicker-free DOM cycling logic
+    function cycleCards(direction) {
+        swiper.style.transition = ''; // Disable transition for the swap
+
+        const temp = cards.prev;
+        if (direction === 'up') {
+            cards.prev = cards.current;
+            cards.current = cards.next;
+            cards.next = temp;
+        } else { // down
+            cards.next = cards.current;
+            cards.current = cards.prev;
+            cards.prev = temp;
+        }
+        
+        cards.prev.id = 'card-prev';
+        cards.current.id = 'card-current';
+        cards.next.id = 'card-next';
+        
+        swiper.style.transform = `translateY(-${screenHeight}px)`;
+
+        // Update the content of the new out-of-view card
+        if (direction === 'up') {
+            updateCard(cards.next, artworks[currentIndex + 1]);
+        } else {
+            updateCard(cards.prev, artworks[currentIndex - 1]);
+        }
+
+        if (artworks.length - currentIndex < 3) {
+            fillArtworkBuffer(artworks.length + 5);
+        }
     }
 
     // --- Touch Events & Animation ---
@@ -111,32 +141,29 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 updateCard(cards.current, null, 'loading');
                 await waitForImageLoad(artworks[targetIndex]);
+                
+                // Restore current card's caption before animating away
+                updateCard(cards.current, artworks[currentIndex]);
 
-                // Animate the container
+                // Update state before animation
+                currentIndex = targetIndex;
+
                 swiper.style.transition = 'transform 0.4s ease-out';
                 const newY = direction === 'up' ? -2 * screenHeight : 0;
                 swiper.style.transform = `translateY(${newY}px)`;
                 
                 await new Promise(resolve => setTimeout(resolve, 400));
                 
-                // THE CORE FIX: Update state, then instantly reset position and redraw all cards.
-                currentIndex = targetIndex;
-                swiper.style.transition = ''; // No transition for the reset
-                swiper.style.transform = `translateY(-${screenHeight}px)`; // Snap back
-                updateAllCards(); // Redraw everything based on the new currentIndex
+                cycleCards(direction);
 
             } catch {
-                updateCard(cards.current, artworks[currentIndex]); // Restore on failure
+                updateCard(cards.current, artworks[currentIndex]); // Restore caption
                 swiper.style.transition = 'transform 0.4s ease-out';
                 swiper.style.transform = `translateY(-${screenHeight}px)`;
             } finally {
                 isAnimating = false;
-                if (artworks.length - currentIndex < 3) {
-                    fillArtworkBuffer(artworks.length + 5);
-                }
             }
         } else {
-            // Bounce back if swipe is not enough
             swiper.style.transition = 'transform 0.4s ease-out';
             swiper.style.transform = `translateY(-${screenHeight}px)`;
         }
@@ -159,7 +186,10 @@ document.addEventListener('DOMContentLoaded', () => {
             await new Promise(resolve => setTimeout(resolve, 400));
 
             currentIndex = randomIndex;
-            updateAllCards();
+            // When doing a random jump, we have to reset all cards
+            updateCard(cards.current, artworks[currentIndex]);
+            updateCard(cards.prev, artworks[currentIndex - 1]);
+            updateCard(cards.next, artworks[currentIndex + 1]);
         } catch {
             updateCard(cards.current, artworks[currentIndex]);
         } finally {
