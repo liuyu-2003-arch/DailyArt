@@ -1,4 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const VERSION = 'v1.0-final-fix';
+    document.getElementById('version-display').textContent = VERSION;
+
     const swiper = document.querySelector('.swiper-container');
     const cards = {
         prev: document.getElementById('card-prev'),
@@ -16,79 +19,35 @@ document.addEventListener('DOMContentLoaded', () => {
     let isFetchingData = false, hasMorePhotos = true, currentPage = 1;
     let isAnimating = false;
     const screenHeight = window.innerHeight;
-    const PRELOAD_BUFFER_SIZE = 5;
-
-    // --- Smart Preloader Service ---
-    function startPreloaderService() {
-        setInterval(() => {
-            if (isFetchingData) return;
-            for (let i = 0; i < PRELOAD_BUFFER_SIZE; i++) {
-                const artwork = artworks[currentIndex + i];
-                if (artwork && !artwork.isPreloaded && !artwork.isLoading) {
-                    preloadImage(artwork);
-                }
-            }
-        }, 1000);
-    }
-
-    function preloadImage(artwork) {
-        artwork.isLoading = true;
-        const img = new Image();
-        img.src = artwork.image;
-        img.onload = () => {
-            artwork.isPreloaded = true;
-            artwork.isLoading = false;
-        };
-        img.onerror = () => {
-            artwork.valid = false;
-            artwork.isPreloaded = false;
-            artwork.isLoading = false;
-        };
-    }
 
     // --- Initialization ---
     async function initialize() {
-        await fillArtworkBuffer(PRELOAD_BUFFER_SIZE);
+        await fillArtworkBuffer(5);
         if (artworks.length > 0) {
-            startPreloaderService();
-            await waitForPreload(artworks[0]);
+            await waitForImageLoad(artworks[0]);
             setupInitialCards();
         } else {
             setErrorState("Could not load any photos from Pexels.");
         }
     }
 
-    async function waitForPreload(artwork) {
-        if (!artwork) return Promise.reject();
-        if (artwork.isPreloaded) return Promise.resolve();
-        
-        updateCard(cards.current, null, 'loading');
-        return new Promise((resolve, reject) => {
-            const checkInterval = setInterval(() => {
-                if (artwork.isPreloaded) {
-                    clearInterval(checkInterval);
-                    resolve();
-                } else if (artwork.valid === false) {
-                    clearInterval(checkInterval);
-                    reject();
-                }
-            }, 100);
-        });
-    }
-
     function setupInitialCards() {
         currentIndex = 0;
         swiper.style.transform = `translateY(-${screenHeight}px)`;
-        updateCard(cards.current, artworks[0]);
-        updateCard(cards.next, artworks[1]);
-        cards.prev.classList.remove('visible');
+        updateAllCards();
     }
 
-    // --- Card & Data Management ---
+    // --- Core Data & UI Update Logic ---
+    function updateAllCards() {
+        updateCard(cards.current, artworks[currentIndex]);
+        updateCard(cards.prev, artworks[currentIndex - 1]);
+        updateCard(cards.next, artworks[currentIndex + 1]);
+    }
+
     function updateCard(cardElement, artworkData, state) {
         if (!cardElement) return;
         if (!artworkData) {
-            if(cardElement) cardElement.classList.remove('visible');
+            cardElement.classList.remove('visible');
             return;
         }
         const titleEl = cardElement.querySelector('.caption-title');
@@ -108,34 +67,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // New, simplified cleanup function. It ONLY juggles DOM elements.
-    function cleanupAfterSwipe(direction) {
-        swiper.style.transition = '';
-
-        const temp = cards.prev;
-        if (direction === 'up') {
-            cards.prev = cards.current;
-            cards.current = cards.next;
-            cards.next = temp;
-        } else {
-            cards.next = cards.current;
-            cards.current = cards.prev;
-            cards.prev = temp;
-        }
+    async function waitForImageLoad(artwork) {
+        if (!artwork) return Promise.reject();
         
-        cards.prev.id = 'card-prev';
-        cards.current.id = 'card-current';
-        cards.next.id = 'card-next';
-        
-        swiper.style.transform = `translateY(-${screenHeight}px)`;
-
-        // Update the now out-of-view cards. The current card is NOT touched.
-        updateCard(cards.prev, artworks[currentIndex - 1]);
-        updateCard(cards.next, artworks[currentIndex + 1]);
-
-        if (artworks.length - currentIndex < PRELOAD_BUFFER_SIZE) {
-            fillArtworkBuffer(artworks.length + 5);
-        }
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.src = artwork.image;
+            img.onload = resolve;
+            img.onerror = reject;
+        });
     }
 
     // --- Touch Events & Animation ---
@@ -168,12 +108,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (canSwipeUp || canSwipeDown) {
             isAnimating = true;
             const targetIndex = (direction === 'up') ? currentIndex + 1 : currentIndex - 1;
-            const targetArtwork = artworks[targetIndex];
-
+            
             try {
-                await waitForPreload(targetArtwork);
-                
-                // State is updated HERE, before the animation.
+                updateCard(cards.current, null, 'loading');
+                await waitForImageLoad(artworks[targetIndex]);
+
+                // Update state right before animation
                 currentIndex = targetIndex;
 
                 swiper.style.transition = 'transform 0.4s ease-out';
@@ -182,7 +122,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 await new Promise(resolve => setTimeout(resolve, 400));
                 
-                cleanupAfterSwipe(direction);
+                // The new, simplified "snap back" logic
+                swiper.style.transition = '';
+                swiper.style.transform = `translateY(-${screenHeight}px)`;
+                updateAllCards();
 
             } catch {
                 updateCard(cards.current, artworks[currentIndex]); // Restore caption
@@ -190,6 +133,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 swiper.style.transform = `translateY(-${screenHeight}px)`;
             } finally {
                 isAnimating = false;
+                if (artworks.length - currentIndex < 3) {
+                    fillArtworkBuffer(artworks.length + 5);
+                }
             }
         } else {
             swiper.style.transition = 'transform 0.4s ease-out';
@@ -206,17 +152,15 @@ document.addEventListener('DOMContentLoaded', () => {
         } while (randomIndex === currentIndex);
 
         isAnimating = true;
-        const targetArtwork = artworks[randomIndex];
-        
         try {
-            await waitForPreload(targetArtwork);
+            updateCard(cards.current, null, 'loading');
+            await waitForImageLoad(artworks[randomIndex]);
+            
             cards.current.classList.remove('visible');
             await new Promise(resolve => setTimeout(resolve, 400));
 
             currentIndex = randomIndex;
-            updateCard(cards.current, artworks[currentIndex]);
-            updateCard(cards.prev, artworks[currentIndex - 1]);
-            updateCard(cards.next, artworks[currentIndex + 1]);
+            updateAllCards();
         } catch {
             updateCard(cards.current, artworks[currentIndex]);
         } finally {
@@ -238,7 +182,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         artworks.push({
                             image: photo.src.large, title: photo.alt || 'Untitled',
                             photographer: photo.photographer, photographerUrl: photo.photographer_url,
-                            valid: true, isPreloaded: false, isLoading: false,
                         });
                     }
                 }
