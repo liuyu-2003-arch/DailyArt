@@ -16,19 +16,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let isFetchingData = false, hasMorePhotos = true, currentPage = 1;
     let isAnimating = false;
     const screenHeight = window.innerHeight;
-    const PRELOAD_BUFFER_SIZE = 5; // How many images to preload ahead
+    const PRELOAD_BUFFER_SIZE = 5;
 
     // --- Smart Preloader Service ---
     function startPreloaderService() {
         setInterval(() => {
-            if (isFetchingData) return; // Don't preload while fetching new data
+            if (isFetchingData) return;
             for (let i = 0; i < PRELOAD_BUFFER_SIZE; i++) {
                 const artwork = artworks[currentIndex + i];
                 if (artwork && !artwork.isPreloaded && !artwork.isLoading) {
                     preloadImage(artwork);
                 }
             }
-        }, 1000); // Check every second
+        }, 1000);
     }
 
     function preloadImage(artwork) {
@@ -38,13 +38,11 @@ document.addEventListener('DOMContentLoaded', () => {
         img.onload = () => {
             artwork.isPreloaded = true;
             artwork.isLoading = false;
-            console.log(`Preloaded: ${artwork.title}`);
         };
         img.onerror = () => {
             artwork.valid = false;
             artwork.isPreloaded = false;
             artwork.isLoading = false;
-            console.warn(`Failed to preload: ${artwork.title}`);
         };
     }
 
@@ -53,7 +51,6 @@ document.addEventListener('DOMContentLoaded', () => {
         await fillArtworkBuffer(PRELOAD_BUFFER_SIZE);
         if (artworks.length > 0) {
             startPreloaderService();
-            // Wait for the very first image to be ready before showing it
             await waitForPreload(artworks[0]);
             setupInitialCards();
         } else {
@@ -65,17 +62,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!artwork) return Promise.reject();
         if (artwork.isPreloaded) return Promise.resolve();
         
-        updateCard(cards.current, null, 'loading'); // Show loading state on current card
+        updateCard(cards.current, null, 'loading');
         return new Promise((resolve, reject) => {
             const checkInterval = setInterval(() => {
                 if (artwork.isPreloaded) {
                     clearInterval(checkInterval);
                     resolve();
-                } else if (artwork.valid === false) { // If preload failed
+                } else if (artwork.valid === false) {
                     clearInterval(checkInterval);
                     reject();
                 }
-            }, 100); // Check every 100ms
+            }, 100);
         });
     }
 
@@ -111,10 +108,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function rearrangeCards(direction) {
+    // New, simplified cleanup function. It ONLY juggles DOM elements.
+    function cleanupAfterSwipe(direction) {
         swiper.style.transition = '';
-        currentIndex += (direction === 'up' ? 1 : -1);
-        
+
         const temp = cards.prev;
         if (direction === 'up') {
             cards.prev = cards.current;
@@ -132,6 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         swiper.style.transform = `translateY(-${screenHeight}px)`;
 
+        // Update the now out-of-view cards. The current card is NOT touched.
         updateCard(cards.prev, artworks[currentIndex - 1]);
         updateCard(cards.next, artworks[currentIndex + 1]);
 
@@ -163,23 +161,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const deltaY = e.changedTouches[0].clientY - touchStartY;
         const swipeThreshold = screenHeight * 0.2;
         const direction = deltaY < -swipeThreshold ? 'up' : (deltaY > swipeThreshold ? 'down' : 'none');
-        const targetIndex = direction === 'up' ? currentIndex + 1 : currentIndex - 1;
-        const targetArtwork = artworks[targetIndex];
+        
+        const canSwipeUp = direction === 'up' && currentIndex < artworks.length - 1;
+        const canSwipeDown = direction === 'down' && currentIndex > 0;
 
-        if (targetArtwork) {
+        if (canSwipeUp || canSwipeDown) {
             isAnimating = true;
+            const targetIndex = (direction === 'up') ? currentIndex + 1 : currentIndex - 1;
+            const targetArtwork = artworks[targetIndex];
+
             try {
                 await waitForPreload(targetArtwork);
                 
+                // State is updated HERE, before the animation.
+                currentIndex = targetIndex;
+
                 swiper.style.transition = 'transform 0.4s ease-out';
                 const newY = direction === 'up' ? -2 * screenHeight : 0;
                 swiper.style.transform = `translateY(${newY}px)`;
                 
                 await new Promise(resolve => setTimeout(resolve, 400));
                 
-                rearrangeCards(direction);
+                cleanupAfterSwipe(direction);
+
             } catch {
-                // Preload failed, bounce back
                 updateCard(cards.current, artworks[currentIndex]); // Restore caption
                 swiper.style.transition = 'transform 0.4s ease-out';
                 swiper.style.transform = `translateY(-${screenHeight}px)`;
@@ -195,7 +200,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Random Button & Data Fetching ---
     randomButton.addEventListener('click', async () => {
         if (isAnimating || artworks.length < 2) return;
-        
         let randomIndex;
         do {
             randomIndex = Math.floor(Math.random() * artworks.length);
@@ -206,7 +210,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         try {
             await waitForPreload(targetArtwork);
-            
             cards.current.classList.remove('visible');
             await new Promise(resolve => setTimeout(resolve, 400));
 
@@ -215,8 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateCard(cards.prev, artworks[currentIndex - 1]);
             updateCard(cards.next, artworks[currentIndex + 1]);
         } catch {
-            updateCard(cards.current, artworks[currentIndex]); // Restore caption
-            console.warn("Failed to load random image, staying on current.");
+            updateCard(cards.current, artworks[currentIndex]);
         } finally {
             isAnimating = false;
         }
