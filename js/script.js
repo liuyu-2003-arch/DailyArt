@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const VERSION = 'v1.7-env-fix';
+    const VERSION = 'v1.7-env-fix'; // We are restoring this correct version
     document.getElementById('version-display').textContent = VERSION;
 
     const swiper = document.querySelector('.swiper-container');
@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const randomButton = document.getElementById('random-button');
     const artContainer = document.querySelector('.art-container');
 
-    const apiUrl = '/api/pexels';
+    const apiUrl = '/api/pexels'; // The ONLY change is here: we call our own server, not Pexels directly.
     
     let artworks = [];
     let currentIndex = -1;
@@ -27,7 +27,6 @@ document.addEventListener('DOMContentLoaded', () => {
             await waitForImageLoad(artworks[0]);
             setupInitialCards();
         } else {
-            // This part will now be handled by the error message from the API call
             if (!document.body.classList.contains('error-state')) {
                 setErrorState("Could not load any photos.");
             }
@@ -176,7 +175,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const data = await response.json();
 
                 if (!response.ok) {
-                    // Display specific error from the serverless function
                     throw new Error(data.error || `API responded with ${response.status}`);
                 }
 
