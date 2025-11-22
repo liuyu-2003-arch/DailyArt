@@ -1,11 +1,11 @@
 // api/pexels.js
 export default async function handler(request, response) {
-    const apiKey = bnPRAGRfMivaeevwqKCh42RJ;
+    const apiKey = process.env.PEXELS_API_KEY;
 
-    // Crucial check: Ensure the API key is configured on Vercel.
     if (!apiKey) {
+        console.error("PEXELS_API_KEY is not set in environment variables.");
         return response.status(412).json({ 
-            error: 'Pexels API Key is not configured on the server.' 
+            error: 'Pexels API Key is not configured on the server. Please set it in your Vercel project settings.' 
         });
     }
 
@@ -20,7 +20,8 @@ export default async function handler(request, response) {
         });
 
         if (!pexelsResponse.ok) {
-            // Forward the error from Pexels API
+            const errorBody = await pexelsResponse.text();
+            console.error(`Pexels API Error: Status ${pexelsResponse.status}, Body: ${errorBody}`);
             return response.status(pexelsResponse.status).json({ 
                 error: `Pexels API responded with ${pexelsResponse.status}` 
             });
@@ -31,6 +32,7 @@ export default async function handler(request, response) {
         response.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate');
         response.status(200).json(data);
     } catch (error) {
+        console.error("Internal Server Error:", error);
         response.status(500).json({ error: error.message });
     }
 }
