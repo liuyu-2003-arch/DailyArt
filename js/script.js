@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const VERSION = 'v1.7-env-fix'; // We are restoring this correct version
+    const VERSION = 'v1.8-json-fix';
     document.getElementById('version-display').textContent = VERSION;
 
     const swiper = document.querySelector('.swiper-container');
@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const randomButton = document.getElementById('random-button');
     const artContainer = document.querySelector('.art-container');
 
-    const apiUrl = '/api/pexels'; // The ONLY change is here: we call our own server, not Pexels directly.
+    const apiUrl = '/api/pexels';
     
     let artworks = [];
     let currentIndex = -1;
@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setupInitialCards();
         } else {
             if (!document.body.classList.contains('error-state')) {
-                setErrorState("Could not load any photos.");
+                setErrorState("Could not load any photos. Please try again later.");
             }
         }
     }
@@ -172,11 +172,14 @@ document.addEventListener('DOMContentLoaded', () => {
         while (artworks.length < targetCount && hasMorePhotos) {
             try {
                 const response = await fetch(`${apiUrl}?page=${currentPage}`);
-                const data = await response.json();
-
+                
+                // THE CORE FIX: Check if the response is OK before trying to parse JSON.
                 if (!response.ok) {
-                    throw new Error(data.error || `API responded with ${response.status}`);
+                    const errorText = await response.text(); // Get the actual error text (which might be HTML)
+                    throw new Error(errorText);
                 }
+
+                const data = await response.json();
 
                 if (data.photos.length === 0) { hasMorePhotos = false; break; }
                 for (const photo of data.photos) {
@@ -189,6 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 currentPage++;
             } catch (error) {
+                // Now this will display a more useful error message
                 setErrorState(error.message);
                 break;
             }
@@ -197,7 +201,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setErrorState(message) {
-        artContainer.setAttribute('data-error-message', message);
+        // Sanitize the message to prevent displaying raw HTML
+        const cleanMessage = message.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        artContainer.setAttribute('data-error-message', cleanMessage);
         document.body.classList.add('error-state');
         randomButton.style.display = 'none';
     }
