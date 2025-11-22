@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const VERSION = 'v1.3-final-polish';
+    const VERSION = 'v1.4-cache-bust';
     document.getElementById('version-display').textContent = VERSION;
 
     const swiper = document.querySelector('.swiper-container');
@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let artworks = [];
     let currentIndex = -1;
     let isFetchingData = false, hasMorePhotos = true;
-    let currentPage = Math.floor(Math.random() * 100) + 1; // Start from a random page
+    let currentPage = Math.floor(Math.random() * 100) + 1;
     let isAnimating = false;
     const screenHeight = window.innerHeight;
 
@@ -76,14 +76,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // The robust, flicker-free DOM cycling logic
     function cycleCards(direction) {
-        swiper.style.transition = ''; // Disable transition for the swap
+        swiper.style.transition = '';
 
         const temp = cards.prev;
         if (direction === 'up') {
             cards.prev = cards.current;
             cards.current = cards.next;
             cards.next = temp;
-        } else { // down
+        } else {
             cards.next = cards.current;
             cards.current = cards.prev;
             cards.prev = temp;
@@ -95,7 +95,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         swiper.style.transform = `translateY(-${screenHeight}px)`;
 
-        // Update the content of the new out-of-view card
         if (direction === 'up') {
             updateCard(cards.next, artworks[currentIndex + 1]);
         } else {
@@ -142,10 +141,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateCard(cards.current, null, 'loading');
                 await waitForImageLoad(artworks[targetIndex]);
                 
-                // Restore current card's caption before animating away
                 updateCard(cards.current, artworks[currentIndex]);
 
-                // Update state before animation
                 currentIndex = targetIndex;
 
                 swiper.style.transition = 'transform 0.4s ease-out';
@@ -157,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 cycleCards(direction);
 
             } catch {
-                updateCard(cards.current, artworks[currentIndex]); // Restore caption
+                updateCard(cards.current, artworks[currentIndex]);
                 swiper.style.transition = 'transform 0.4s ease-out';
                 swiper.style.transform = `translateY(-${screenHeight}px)`;
             } finally {
@@ -186,7 +183,6 @@ document.addEventListener('DOMContentLoaded', () => {
             await new Promise(resolve => setTimeout(resolve, 400));
 
             currentIndex = randomIndex;
-            // When doing a random jump, we have to reset all cards
             updateCard(cards.current, artworks[currentIndex]);
             updateCard(cards.prev, artworks[currentIndex - 1]);
             updateCard(cards.next, artworks[currentIndex + 1]);

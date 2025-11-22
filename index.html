@@ -43,6 +43,12 @@
         </svg>
     </button>
     <div id="version-display"></div>
-    <script src="js/script.js"></script>
+    <script>
+        // Cache-busting script loader
+        const version = new Date().getTime();
+        const script = document.createElement('script');
+        script.src = `js/script.js?v=${version}`;
+        document.body.appendChild(script);
+    </script>
 </body>
 </html>
