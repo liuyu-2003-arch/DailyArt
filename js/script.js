@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const VERSION = 'v1.5-final';
+    const VERSION = 'v1.6-vercel';
     document.getElementById('version-display').textContent = VERSION;
 
     const swiper = document.querySelector('.swiper-container');
@@ -11,8 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const randomButton = document.getElementById('random-button');
     const artContainer = document.querySelector('.art-container');
 
-    const apiKey = 'dcvXtf9LJtUm2KIhnEdMpomMlx4NLhAvzdPArmKTHTq3ISqJpWj2tNUX';
-    const apiUrl = 'https://api.pexels.com/v1/curated';
+    const apiUrl = '/api/pexels'; // Use our own serverless function
     
     let artworks = [];
     let currentIndex = -1;
@@ -28,19 +27,23 @@ document.addEventListener('DOMContentLoaded', () => {
             await waitForImageLoad(artworks[0]);
             setupInitialCards();
         } else {
-            setErrorState("Could not load any photos from Pexels.");
+            setErrorState("Could not load any photos.");
         }
     }
 
     function setupInitialCards() {
         currentIndex = 0;
         swiper.style.transform = `translateY(-${screenHeight}px)`;
-        updateCard(cards.current, artworks[0]);
-        updateCard(cards.next, artworks[1]);
-        cards.prev.classList.remove('visible');
+        updateAllCards();
     }
 
     // --- Core Data & UI Update Logic ---
+    function updateAllCards() {
+        updateCard(cards.current, artworks[currentIndex]);
+        updateCard(cards.prev, artworks[currentIndex - 1]);
+        updateCard(cards.next, artworks[currentIndex + 1]);
+    }
+
     function updateCard(cardElement, artworkData, state) {
         if (!cardElement) return;
         if (!artworkData) {
@@ -72,38 +75,6 @@ document.addEventListener('DOMContentLoaded', () => {
             img.onload = resolve;
             img.onerror = reject;
         });
-    }
-
-    // The robust, flicker-free DOM cycling logic
-    function cycleCards(direction) {
-        swiper.style.transition = '';
-
-        const temp = cards.prev;
-        if (direction === 'up') {
-            cards.prev = cards.current;
-            cards.current = cards.next;
-            cards.next = temp;
-        } else {
-            cards.next = cards.current;
-            cards.current = cards.prev;
-            cards.prev = temp;
-        }
-        
-        cards.prev.id = 'card-prev';
-        cards.current.id = 'card-current';
-        cards.next.id = 'card-next';
-        
-        swiper.style.transform = `translateY(-${screenHeight}px)`;
-
-        if (direction === 'up') {
-            updateCard(cards.next, artworks[currentIndex + 1]);
-        } else {
-            updateCard(cards.prev, artworks[currentIndex - 1]);
-        }
-
-        if (artworks.length - currentIndex < 3) {
-            fillArtworkBuffer(artworks.length + 5);
-        }
     }
 
     // --- Touch Events & Animation ---
@@ -140,10 +111,6 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 updateCard(cards.current, null, 'loading');
                 await waitForImageLoad(artworks[targetIndex]);
-                
-                updateCard(cards.current, artworks[currentIndex]);
-
-                currentIndex = targetIndex;
 
                 swiper.style.transition = 'transform 0.4s ease-out';
                 const newY = direction === 'up' ? -2 * screenHeight : 0;
@@ -151,14 +118,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 await new Promise(resolve => setTimeout(resolve, 400));
                 
-                cycleCards(direction);
+                // THE CORE FIX: Update state, then instantly reset position and redraw all cards.
+                currentIndex = targetIndex;
+                swiper.style.transition = ''; // No transition for the reset
+                swiper.style.transform = `translateY(-${screenHeight}px)`; // Snap back
+                updateAllCards(); // Redraw everything based on the new currentIndex
 
             } catch {
-                updateCard(cards.current, artworks[currentIndex]);
+                updateCard(cards.current, artworks[currentIndex]); // Restore on failure
                 swiper.style.transition = 'transform 0.4s ease-out';
                 swiper.style.transform = `translateY(-${screenHeight}px)`;
             } finally {
                 isAnimating = false;
+                if (artworks.length - currentIndex < 3) {
+                    fillArtworkBuffer(artworks.length + 5);
+                }
             }
         } else {
             swiper.style.transition = 'transform 0.4s ease-out';
@@ -183,9 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
             await new Promise(resolve => setTimeout(resolve, 400));
 
             currentIndex = randomIndex;
-            updateCard(cards.current, artworks[currentIndex]);
-            updateCard(cards.prev, artworks[currentIndex - 1]);
-            updateCard(cards.next, artworks[currentIndex + 1]);
+            updateAllCards();
         } catch {
             updateCard(cards.current, artworks[currentIndex]);
         } finally {
@@ -198,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
         isFetchingData = true;
         while (artworks.length < targetCount && hasMorePhotos) {
             try {
-                const response = await fetch(`${apiUrl}?page=${currentPage}&per_page=15`, { headers: { Authorization: apiKey } });
+                const response = await fetch(`${apiUrl}?page=${currentPage}`);
                 if (!response.ok) throw new Error(`API Error: ${response.status}`);
                 const data = await response.json();
                 if (data.photos.length === 0) { hasMorePhotos = false; break; }
@@ -212,7 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 currentPage++;
             } catch (error) {
-                setErrorState('Could not connect to the Pexels API.');
+                setErrorState('Could not connect to the API.');
                 break;
             }
         }
