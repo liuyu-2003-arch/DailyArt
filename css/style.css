@@ -4,48 +4,86 @@ body, html {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    font-family: sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f0f0f0;
+    transition: background-color 0.3s ease;
 }
 
 .art-container {
     width: 100%;
     height: 100%;
-    overflow-y: scroll;
-    scroll-snap-type: y mandatory;
 }
 
 .art-card {
     width: 100%;
     height: 100%;
-    scroll-snap-align: start;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     text-align: center;
+    padding: 10px;
+    box-sizing: border-box;
 }
 
 #art-image {
     max-width: 90%;
-    max-height: 70%;
+    max-height: 75%;
     object-fit: contain;
+    border-radius: 4px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    background-color: #fff;
 }
 
 #art-caption {
     margin-top: 20px;
     font-size: 16px;
-    color: #555;
+    color: #333;
     padding: 0 20px;
+    line-height: 1.5;
+    max-height: 15%;
+    overflow-y: auto;
+    transition: font-size 0.3s ease, color 0.3s ease;
 }
 
 #random-button {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 10px 20px;
-    background-color: #333;
-    color: white;
+    bottom: 25px;
+    right: 25px;
+    width: 56px;
+    height: 56px;
+    background-color: rgba(255, 255, 255, 0.9);
     border: none;
-    border-radius: 5px;
+    border-radius: 50%;
     cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    transition: transform 0.2s ease-out;
+}
+
+#random-button:active {
+    transform: scale(0.9);
+}
+
+#random-button svg {
+    width: 28px;
+    height: 28px;
+}
+
+/* --- Error State --- */
+body.error-state {
+    background-color: #fbeae5; /* A light red background */
+}
+
+.error-state .art-card {
+    justify-content: center;
+}
+
+.error-state #art-caption {
+    font-size: 18px;
+    font-weight: bold;
+    color: #c73410;
+    max-height: 80%;
 }
