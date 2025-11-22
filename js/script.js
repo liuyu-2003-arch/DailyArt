@@ -1,72 +1,178 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const artImage = document.getElementById('art-image');
-    const captionTitle = document.getElementById('caption-title');
-    const captionDetail = document.getElementById('caption-detail');
+    const swiper = document.querySelector('.swiper-container');
+    const cards = {
+        prev: document.getElementById('card-prev'),
+        current: document.getElementById('card-current'),
+        next: document.getElementById('card-next'),
+    };
     const randomButton = document.getElementById('random-button');
     const artContainer = document.querySelector('.art-container');
 
-    // --- Pexels API Configuration ---
     const apiKey = 'dcvXtf9LJtUm2KIhnEdMpomMlx4NLhAvzdPArmKTHTq3ISqJpWj2tNUX';
     const apiUrl = 'https://api.pexels.com/v1/curated';
+    
+    let artworks = [];
+    let currentIndex = -1;
+    let isFetching = false, hasMorePhotos = true, currentPage = 1;
+    let isAnimating = false;
+    const screenHeight = window.innerHeight;
 
-    let artworks = [], currentIndex = -1, currentPage = 1, isFetching = false, hasMorePhotos = true;
-    const photosPerPage = 15;
-
-    // --- UI & State Management ---
-    function updateCaption(title, detailText, detailUrl) {
-        captionTitle.textContent = title;
-        if (detailText && detailUrl) {
-            captionDetail.textContent = detailText;
-            captionDetail.href = detailUrl;
-            captionDetail.style.display = 'inline-block';
+    // --- Initialization ---
+    async function initialize() {
+        await fillArtworkBuffer(5); // Fetch a slightly larger initial buffer
+        if (artworks.length >= 1) {
+            setupInitialCards();
         } else {
-            captionDetail.style.display = 'none';
+            setErrorState("Could not load any photos from Pexels.");
         }
     }
 
-    function setErrorState(message) {
-        document.body.classList.add('error-state');
-        artImage.style.display = 'none';
-        randomButton.style.display = 'none';
-        updateCaption(message, null, null);
+    function setupInitialCards() {
+        currentIndex = 0;
+        swiper.style.transform = `translateY(-${screenHeight}px)`;
+        updateCard(cards.current, artworks[0]);
+        if (artworks.length > 1) updateCard(cards.next, artworks[1]);
+        cards.prev.classList.remove('visible');
     }
 
-    // --- Core Data Fetching Logic ---
-    async function initialize() {
-        updateCaption('Connecting to Pexels...', null, null);
-        await fillArtworkBuffer(5);
-        if (artworks.length > 0) loadArtwork(0);
-        else setErrorState("Could not load any photos from Pexels.");
+    // --- Card & Data Management ---
+    function updateCard(cardElement, artworkData) {
+        if (!cardElement || !artworkData) {
+            if(cardElement) cardElement.classList.remove('visible');
+            return;
+        }
+        cardElement.querySelector('.art-image').src = artworkData.image;
+        cardElement.querySelector('.caption-title').textContent = artworkData.title;
+        const detail = cardElement.querySelector('.caption-detail');
+        detail.textContent = `Photo by ${artworkData.photographer}`;
+        detail.href = artworkData.photographerUrl;
+        cardElement.classList.add('visible');
     }
 
+    async function shiftCards(direction) {
+        isAnimating = true;
+        swiper.style.transition = 'transform 0.4s ease-out';
+        const newY = direction === 'up' ? -2 * screenHeight : 0;
+        swiper.style.transform = `translateY(${newY}px)`;
+
+        await new Promise(resolve => setTimeout(resolve, 400));
+
+        swiper.style.transition = '';
+        currentIndex += (direction === 'up' ? 1 : -1);
+
+        // Cycle DOM elements
+        const temp = cards.prev;
+        if (direction === 'up') {
+            cards.prev = cards.current;
+            cards.current = cards.next;
+            cards.next = temp;
+        } else {
+            cards.next = cards.current;
+            cards.current = cards.prev;
+            cards.prev = temp;
+        }
+        
+        cards.prev.id = 'card-prev';
+        cards.current.id = 'card-current';
+        cards.next.id = 'card-next';
+        
+        swiper.style.transform = `translateY(-${screenHeight}px)`;
+
+        updateCard(cards.prev, artworks[currentIndex - 1]);
+        updateCard(cards.next, artworks[currentIndex + 1]);
+
+        if (artworks.length - currentIndex < 3) {
+            fillArtworkBuffer(artworks.length + 5);
+        }
+        isAnimating = false;
+    }
+
+    // --- Touch Events ---
+    let touchStartY = 0;
+    let currentY = 0;
+    artContainer.addEventListener('touchstart', e => {
+        if (isAnimating) return;
+        touchStartY = e.touches[0].clientY;
+        currentY = -screenHeight;
+        swiper.style.transition = '';
+    });
+
+    artContainer.addEventListener('touchmove', e => {
+        if (isAnimating) return;
+        let deltaY = e.touches[0].clientY - touchStartY;
+        if ((deltaY > 0 && currentIndex <= 0) || (deltaY < 0 && currentIndex >= artworks.length - 1)) {
+            deltaY *= 0.3; // Rubber band effect
+        }
+        swiper.style.transform = `translateY(${currentY + deltaY}px)`;
+    });
+
+    artContainer.addEventListener('touchend', e => {
+        if (isAnimating) return;
+        const deltaY = e.changedTouches[0].clientY - touchStartY;
+        const swipeThreshold = screenHeight * 0.2;
+
+        if (deltaY < -swipeThreshold && currentIndex < artworks.length - 1) {
+            shiftCards('up');
+        } else if (deltaY > swipeThreshold && currentIndex > 0) {
+            shiftCards('down');
+        } else {
+            swiper.style.transition = 'transform 0.4s ease-out';
+            swiper.style.transform = `translateY(-${screenHeight}px)`;
+        }
+    });
+    
+    // --- Random Button Logic ---
+    randomButton.addEventListener('click', async () => {
+        if (isAnimating || artworks.length === 0) return;
+        
+        let randomIndex;
+        do {
+            randomIndex = Math.floor(Math.random() * artworks.length);
+        } while (randomIndex === currentIndex && artworks.length > 1);
+
+        isAnimating = true;
+        
+        // Fade out current card
+        cards.current.classList.remove('visible');
+        
+        await new Promise(resolve => setTimeout(resolve, 400)); // Wait for fade out
+
+        // Update all cards based on the new random index
+        currentIndex = randomIndex;
+        updateCard(cards.current, artworks[currentIndex]);
+        updateCard(cards.prev, artworks[currentIndex - 1]);
+        updateCard(cards.next, artworks[currentIndex + 1]);
+
+        // Ensure buffer is filled for future swipes
+        if (artworks.length - currentIndex < 3) {
+            await fillArtworkBuffer(artworks.length + 5);
+            // Re-update next card in case new data was fetched
+            updateCard(cards.next, artworks[currentIndex + 1]);
+        }
+        
+        isAnimating = false;
+    });
+
+    // --- Data Fetching ---
     async function fillArtworkBuffer(targetCount) {
         if (isFetching || !hasMorePhotos) return;
         isFetching = true;
-        let foundCount = artworks.filter(a => a.valid).length;
-
-        while (foundCount < targetCount && hasMorePhotos) {
-            updateCaption(`Searching for photos... (${foundCount}/${targetCount})`, null, null);
+        while (artworks.length < targetCount && hasMorePhotos) {
             try {
-                const response = await fetch(`${apiUrl}?page=${currentPage}&per_page=${photosPerPage}`, { headers: { Authorization: apiKey } });
+                const response = await fetch(`${apiUrl}?page=${currentPage}&per_page=15`, { headers: { Authorization: apiKey } });
                 if (!response.ok) throw new Error(`API Error: ${response.status}`);
                 const data = await response.json();
                 if (data.photos.length === 0) { hasMorePhotos = false; break; }
-
                 for (const photo of data.photos) {
-                    if (photo.src && photo.src.large && photo.alt) {
+                    if (photo.src && photo.src.large) {
                         artworks.push({
-                            image: photo.src.large,
-                            title: photo.alt,
-                            photographer: `Photo by ${photo.photographer}`,
-                            photographerUrl: photo.photographer_url,
-                            valid: true,
+                            image: photo.src.large, title: photo.alt || 'Untitled',
+                            photographer: photo.photographer, photographerUrl: photo.photographer_url,
                         });
-                        foundCount++;
                     }
                 }
                 currentPage++;
             } catch (error) {
-                console.error('Failed to fetch photos:', error);
                 setErrorState('Could not connect to the Pexels API.');
                 break;
             }
@@ -74,85 +180,11 @@ document.addEventListener('DOMContentLoaded', () => {
         isFetching = false;
     }
 
-    // --- Artwork Navigation ---
-    function loadArtwork(index) {
-        if (index < 0 || index >= artworks.length) return;
-        const artwork = artworks[index];
-        if (!artwork.valid) { loadNextArtwork(); return; }
-
-        currentIndex = index;
-        updateCaption('Loading...', null, null);
-        artImage.src = artwork.image;
-
-        if (artworks.slice(index).filter(a => a.valid).length < 3 && hasMorePhotos) {
-            fillArtworkBuffer(artworks.length + 5);
-        }
+    function setErrorState(message) {
+        artContainer.setAttribute('data-error-message', message);
+        document.body.classList.add('error-state');
+        randomButton.style.display = 'none';
     }
-
-    async function loadNextArtwork() {
-        const nextIndex = findValidIndex(currentIndex + 1, 'forward');
-        if (nextIndex !== -1) {
-            loadArtwork(nextIndex);
-        } else if (hasMorePhotos) {
-            updateCaption('Searching for more photos...', null, null);
-            await fillArtworkBuffer(artworks.length + 1);
-            const newNextIndex = findValidIndex(currentIndex + 1, 'forward');
-            if (newNextIndex !== -1) loadArtwork(newNextIndex);
-            else updateCaption("You've seen all available photos!", null, null);
-        } else {
-            updateCaption("You've seen all available photos!", null, null);
-        }
-    }
-    
-    function loadPreviousArtwork() {
-        const prevIndex = findValidIndex(currentIndex - 1, 'backward');
-        if (prevIndex !== -1) loadArtwork(prevIndex);
-    }
-
-    function findValidIndex(start, direction) {
-        for (let i = start; direction === 'forward' ? i < artworks.length : i >= 0; i += (direction === 'forward' ? 1 : -1)) {
-            if (artworks[i] && artworks[i].valid) return i;
-        }
-        return -1;
-    }
-
-    // --- Event Listeners ---
-    artImage.onerror = () => { if(artworks[currentIndex]) artworks[currentIndex].valid = false; loadNextArtwork(); };
-    artImage.onload = () => { if(artworks[currentIndex]) updateCaption(artworks[currentIndex].title, artworks[currentIndex].photographer, artworks[currentIndex].photographerUrl); };
-    
-    // Desktop Scroll
-    let lastScroll = 0;
-    window.addEventListener('wheel', (event) => {
-        const now = new Date().getTime();
-        if (now - lastScroll < 800) return;
-        lastScroll = now;
-        if (event.deltaY > 0) loadNextArtwork();
-        else loadPreviousArtwork();
-    });
-
-    // Mobile Touch Swipe
-    let touchStartY = 0;
-    let touchEndY = 0;
-    artContainer.addEventListener('touchstart', e => touchStartY = e.changedTouches[0].screenY, { passive: true });
-    artContainer.addEventListener('touchend', e => {
-        touchEndY = e.changedTouches[0].screenY;
-        handleSwipe();
-    }, { passive: true });
-
-    function handleSwipe() {
-        const swipeDistance = touchEndY - touchStartY;
-        if (Math.abs(swipeDistance) > 50) { // Minimum swipe distance
-            if (swipeDistance < 0) loadNextArtwork(); // Swipe Up
-            else loadPreviousArtwork(); // Swipe Down
-        }
-    }
-
-    randomButton.addEventListener('click', () => {
-        if (artworks.length > 0) {
-            const randomIndex = Math.floor(Math.random() * artworks.length);
-            loadArtwork(randomIndex);
-        }
-    });
 
     initialize();
 });
